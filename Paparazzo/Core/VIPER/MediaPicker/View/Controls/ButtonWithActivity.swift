@@ -3,10 +3,11 @@ import UIKit
 final class ButtonWithActivity: UIButton {
     
     // MARK: - Subviews
-    private let activity = UIActivityIndicatorView(activityIndicatorStyle: .gray)
+    private let activity: UIActivityIndicatorView
     
     // MARK: - State
     private var cachedTitle: String? = nil
+    private var shouldResizeToFitActivity: Bool
     
     var style: MediaPickerContinueButtonStyle = .normal {
         didSet {
@@ -26,9 +27,11 @@ final class ButtonWithActivity: UIButton {
         }
     }
     
-    
     // MARK: - Init
-    init() {
+    init(activityStyle: UIActivityIndicatorView.Style = .gray, shouldResizeToFitActivity: Bool = false) {
+        self.activity = UIActivityIndicatorView(style: activityStyle)
+        self.shouldResizeToFitActivity = shouldResizeToFitActivity
+        
         super.init(frame: .zero)
         
         addSubview(activity)
@@ -39,7 +42,7 @@ final class ButtonWithActivity: UIButton {
     }
     
     // MARK: - Title
-    override func setTitle(_ title: String?, for state: UIControlState) {
+    override func setTitle(_ title: String?, for state: UIControl.State) {
         switch style {
         case .normal:
             super.setTitle(title, for: state)
@@ -50,14 +53,18 @@ final class ButtonWithActivity: UIButton {
                 super.setTitle(title, for: state)
             }
         }
-        
     }
     
     // MARK: - Layout
     override func sizeThatFits(_ size: CGSize) -> CGSize {
         switch style {
-        case .normal:
-            return super.sizeThatFits(size)
+        case .normal, .spinner where !shouldResizeToFitActivity:
+            let labelSize = titleLabel?.sizeThatFits(size) ?? .zero
+            
+            return CGSize(
+                width: labelSize.width + titleEdgeInsets.width + contentEdgeInsets.width,
+                height: labelSize.height + titleEdgeInsets.height + contentEdgeInsets.height
+            )
         case .spinner:
             return size.intersectionWidth(self.height)
         }

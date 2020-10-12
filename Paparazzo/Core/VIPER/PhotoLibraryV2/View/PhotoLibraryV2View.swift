@@ -1,9 +1,10 @@
+import AVFoundation
 import ImageSource
 import UIKit
 
 final class PhotoLibraryV2View: UIView, UICollectionViewDelegateFlowLayout, ThemeConfigurable {
     
-    typealias ThemeType = PhotoLibraryV2UITheme
+    typealias ThemeType = PhotoLibraryV2UITheme & NewCameraUITheme
     
     private enum AlbumsListState {
         case collapsed
@@ -13,6 +14,7 @@ final class PhotoLibraryV2View: UIView, UICollectionViewDelegateFlowLayout, Them
     // MARK: - State
     
     private var albumsListState: AlbumsListState = .collapsed
+    private let isNewFlowPrototype: Bool
     
     var canSelectMoreItems = false
     
@@ -24,6 +26,45 @@ final class PhotoLibraryV2View: UIView, UICollectionViewDelegateFlowLayout, Them
     
     private var cameraViewData: PhotoLibraryCameraViewData?
     
+    private var continueButtonPlacement = MediaPickerContinueButtonPlacement.topRight {
+        didSet {
+            switch continueButtonPlacement {
+            case .topRight:
+                bottomContinueButton.removeFromSuperview()
+                insertSubview(topRightContinueButton, belowSubview: progressIndicator)
+            case .bottom:
+                topRightContinueButton.removeFromSuperview()
+                insertSubview(bottomContinueButton, belowSubview: albumsTableView)
+            }
+        }
+    }
+    
+    var cameraView: PhotoLibraryCameraView? {
+        return collectionView.supplementaryView(
+            forElementKind: UICollectionView.elementKindSectionHeader,
+            at: IndexPath(item: 0, section: 0)
+        ) as? PhotoLibraryCameraView
+    }
+    
+    var previewLayer: AVCaptureVideoPreviewLayer? {
+        return cameraView?.cameraOutputLayer
+    }
+    
+    func setPreviewLayer(_ previewLayer: AVCaptureVideoPreviewLayer?) {
+        cameraView?.setPreviewLayer(previewLayer)
+    }
+    
+    func previewFrame(forBounds bounds: CGRect) -> CGRect {
+        let layout = collectionView.collectionViewLayout as? PhotoLibraryV2Layout
+        let indexPath = IndexPath(item: 0, section: 0)
+        
+        if let frame = layout?.frameForHeader(at: indexPath) {
+            return convert(frame, from: collectionView)
+        }
+        
+        return .zero
+    }
+    
     // MARK: - Subviews
     
     private let layout = PhotoLibraryV2Layout()
@@ -31,12 +72,14 @@ final class PhotoLibraryV2View: UIView, UICollectionViewDelegateFlowLayout, Them
     private var collectionSnapshotView: UIView?
     private let titleView = PhotoLibraryV2TitleView()
     private let accessDeniedView = AccessDeniedView()
-    private let progressIndicator = UIActivityIndicatorView(activityIndicatorStyle: .whiteLarge)
+    private let progressIndicator = UIActivityIndicatorView(style: .whiteLarge)
     private let dimView = UIView()
     private let albumsTableView = PhotoLibraryAlbumsTableView()
     private let placeholderView = UILabel()
     private let closeButton = UIButton()
-    private let continueButton = UIButton()
+    private let topRightContinueButton = ButtonWithActivity(shouldResizeToFitActivity: true)
+    private let bottomContinueButton = ButtonWithActivity(activityStyle: .white)
+    private let selectedPhotosBarView = SelectedPhotosBarView()
     
     // MARK: - Specs
     
@@ -51,8 +94,10 @@ final class PhotoLibraryV2View: UIView, UICollectionViewDelegateFlowLayout, Them
     
     // MARK: - Init
     
-    init() {
+    init(isNewFlowPrototype: Bool) {
         collectionView = UICollectionView(frame: .zero, collectionViewLayout: layout)
+        
+        self.isNewFlowPrototype = isNewFlowPrototype
         
         super.init(frame: .zero)
 
@@ -72,16 +117,23 @@ final class PhotoLibraryV2View: UIView, UICollectionViewDelegateFlowLayout, Them
         
         placeholderView.isHidden = true
         
+        selectedPhotosBarView.isHidden = true
+        selectedPhotosBarView.onButtonTap = { [weak self] in
+            self?.onContinueButtonTap?()
+        }
+        selectedPhotosBarView.accessibilityIdentifier = "selectedPhotosBarView"
+        
         setUpButtons()
         
         addSubview(collectionView)
         addSubview(placeholderView)
         addSubview(accessDeniedView)
         addSubview(dimView)
+        addSubview(selectedPhotosBarView)
         addSubview(albumsTableView)
         addSubview(titleView)
         addSubview(closeButton)
-        addSubview(continueButton)
+        addSubview(topRightContinueButton)
         
         progressIndicator.hidesWhenStopped = true
         progressIndicator.color = UIColor(red: 162.0 / 255, green: 162.0 / 255, blue: 162.0 / 255, alpha: 1)
@@ -107,18 +159,22 @@ final class PhotoLibraryV2View: UIView, UICollectionViewDelegateFlowLayout, Them
             height: closeButton.height
         )
         
-        continueButton.frame = CGRect(
-            x: bounds.right - 8 - continueButton.width,
-            y: max(8, paparazzoSafeAreaInsets.top),
-            width: continueButton.width,
-            height: continueButton.height
+        layOutTopRightContinueButton()
+        
+        bottomContinueButton.layout(
+            left: bounds.left + 16,
+            right: bounds.right - 16,
+            bottom: bounds.bottom - paparazzoSafeAreaInsets.bottom - 16,
+            height: 48
         )
         
         titleView.contentInsets = UIEdgeInsets(
             top: 0,
             left: closeButton.right + 10,
             bottom: 0,
-            right: bounds.width - continueButton.left + 10
+            right: (continueButtonPlacement == .bottom)
+                ? closeButton.right + 10  // same as left, so that it stays centered
+                : bounds.width - topRightContinueButton.left + 10
         )
         
         let titleViewSize = titleView.sizeThatFits(bounds.size)
@@ -137,6 +193,8 @@ final class PhotoLibraryV2View: UIView, UICollectionViewDelegateFlowLayout, Them
             bottom: bounds.bottom
         )
         
+        collectionView.contentInset.bottom = (continueButtonPlacement == .bottom) ? 80 : 16
+        
         placeholderView.resizeToFitSize(collectionView.size)
         placeholderView.center = collectionView.center
         
@@ -149,6 +207,14 @@ final class PhotoLibraryV2View: UIView, UICollectionViewDelegateFlowLayout, Them
         accessDeniedView.frame = collectionView.bounds
         
         progressIndicator.center = bounds.center
+        
+        selectedPhotosBarView.size = selectedPhotosBarView.sizeThatFits(
+            CGSize(width: bounds.width - 32, height: .greatestFiniteMagnitude)
+        )
+        selectedPhotosBarView.center = CGPoint(
+            x: bounds.centerX,
+            y: bounds.bottom - max(16, paparazzoSafeAreaInsets.bottom) - selectedPhotosBarView.size.height / 2
+        )
     }
     
     // MARK: - ThemeConfigurable
@@ -156,29 +222,45 @@ final class PhotoLibraryV2View: UIView, UICollectionViewDelegateFlowLayout, Them
     func setTheme(_ theme: ThemeType) {
         self.theme = theme
         
+        collectionView.backgroundColor = theme.photoLibraryCollectionBackgroundColor
+        
         titleView.setLabelFont(theme.photoLibraryTitleFont)
         titleView.setIcon(theme.photoLibraryAlbumsDisclosureIcon)
+        titleView.backgroundColor = theme.photoLibraryCollectionBackgroundColor
+        titleView.setTitleColor(theme.photoLibraryTitleColor)
+        titleView.setIconColor(theme.photoLibraryAlbumsDisclosureIconColor)
         
         accessDeniedView.setTheme(theme)
         
         closeButton.setImage(theme.closeIcon, for: .normal)
         
-        continueButton.setTitleColor(theme.continueButtonTitleColor, for: .normal)
-        continueButton.titleLabel?.font = theme.continueButtonTitleFont
+        topRightContinueButton.setTitleColor(theme.continueButtonTitleColor, for: .normal)
+        topRightContinueButton.titleLabel?.font = theme.continueButtonTitleFont
         
-        continueButton.setTitleColor(
+        topRightContinueButton.setTitleColor(
             theme.continueButtonTitleColor,
             for: .normal
         )
-        continueButton.setTitleColor(
+        topRightContinueButton.setTitleColor(
             theme.continueButtonTitleHighlightedColor,
             for: .highlighted
         )
         
+        bottomContinueButton.backgroundColor = theme.libraryBottomContinueButtonBackgroundColor
+        bottomContinueButton.titleLabel?.font = theme.libraryBottomContinueButtonFont
+        bottomContinueButton.setTitleColor(theme.libraryBottomContinueButtonTitleColor, for: .normal)
+        
         albumsTableView.setCellLabelFont(theme.photoLibraryAlbumCellFont)
+        albumsTableView.setCellBackgroundColor(theme.photoLibraryAlbumsTableViewCellBackgroundColor)
+        albumsTableView.setTableViewBackgroundColor(theme.photoLibraryAlbumsTableViewBackgroundColor)
+        albumsTableView.setTopSeparatorColor(theme.photoLibraryAlbumsTableTopSeparatorColor)
+        albumsTableView.setCellDefaultLabelColor(theme.photoLibraryAlbumsCellDefaultLabelColor)
+        albumsTableView.setCellSelectedLabelColor(theme.photoLibraryAlbumsCellSelectedLabelColor)
         
         placeholderView.font = theme.photoLibraryPlaceholderFont
         placeholderView.textColor = theme.photoLibraryPlaceholderColor
+        
+        selectedPhotosBarView.setTheme(theme)
     }
     
     // MARK: - PhotoLibraryView
@@ -191,23 +273,59 @@ final class PhotoLibraryV2View: UIView, UICollectionViewDelegateFlowLayout, Them
         set { accessDeniedView.onButtonTap = newValue }
     }
     
+    var onLastPhotoThumbnailTap: (() -> ())? {
+        get { return selectedPhotosBarView.onLastPhotoThumbnailTap }
+        set { selectedPhotosBarView.onLastPhotoThumbnailTap = newValue }
+    }
+    
     var onTitleTap: (() -> ())?
     var onDimViewTap: (() -> ())?
     
     func setContinueButtonTitle(_ title: String) {
-        continueButton.setTitle(title, for: .normal)
-        continueButton.accessibilityValue = title
-        continueButton.size = CGSize(width: continueButton.sizeThatFits().width, height: continueButtonHeight)
+        topRightContinueButton.setTitle(title, for: .normal)
+        topRightContinueButton.accessibilityValue = title
+        topRightContinueButton.size = CGSize(
+            width: topRightContinueButton.sizeThatFits().width,
+            height: continueButtonHeight
+        )
         titleView.setNeedsLayout()
+        
+        bottomContinueButton.setTitle(title, for: .normal)
+        bottomContinueButton.accessibilityValue = title
+    }
+    
+    func setContinueButtonVisible(_ isVisible: Bool) {
+        topRightContinueButton.isHidden = !isVisible
+        bottomContinueButton.isHidden = !isVisible
+    }
+    
+    func setContinueButtonStyle(_ style: MediaPickerContinueButtonStyle) {
+        selectedPhotosBarView.setContinueButtonStyle(style)
+        bottomContinueButton.style = style
+        setTopRightContinueButtonStyle(style)
+    }
+    
+    private func setTopRightContinueButtonStyle(_ style: MediaPickerContinueButtonStyle) {
+        guard topRightContinueButton.style != style else { return }
+        
+        UIView.animate(
+            withDuration: 0.3,
+            animations: {
+                self.topRightContinueButton.style = style
+                self.layOutTopRightContinueButton()
+            }
+        )
+    }
+    
+    func setContinueButtonPlacement(_ placement: MediaPickerContinueButtonPlacement) {
+        continueButtonPlacement = placement
     }
     
     func setCameraViewData(_ viewData: PhotoLibraryCameraViewData?) {
-        
         cameraViewData = viewData
         
-        UIView.performWithoutAnimation {
-            // `collectionView.reloadSections(IndexSet(0..<1))` freezes app completely, don't use it
-            collectionView.reloadData()
+        if let cameraView = cameraView {
+            dataSource.configureHeader?(cameraView)
         }
     }
     
@@ -236,6 +354,7 @@ final class PhotoLibraryV2View: UIView, UICollectionViewDelegateFlowLayout, Them
                             collectionView.scrollToTop()
                             collectionSnapshotView?.removeFromSuperview()
                         }
+                        self.selectCollectionViewCellsAccordingToDataSource()
                         completion?()
                     }
                 )
@@ -248,64 +367,65 @@ final class PhotoLibraryV2View: UIView, UICollectionViewDelegateFlowLayout, Them
     }
     
     func applyChanges(_ changes: PhotoLibraryViewChanges, completion: (() -> ())?) {
-        
         ObjCExceptionCatcher.tryClosure(
             tryClosure: { [collectionView, dataSource] in
                 collectionView.performBatchUpdates(animated: true, updates: {
-                    
+
                     let toIndexPath = { (index: Int) in
                         IndexPath(item: index, section: 0)
                     }
-                    
+
                     // Order is important!
                     // 1. Removing items
                     let indexPathsToDelete = changes.removedIndexes.map(toIndexPath)
-                    
+
                     if indexPathsToDelete.count > 0 {
                         collectionView.deleteItems(at: indexPathsToDelete)
                         dataSource.deleteItems(at: indexPathsToDelete)
                     }
-                    
+
                     // 2. Inserting items
                     let indexPathsToInsert = changes.insertedItems.map { toIndexPath($0.index) }
-                    
+
                     if indexPathsToInsert.count > 0 {
                         collectionView.insertItems(at: indexPathsToInsert)
                         dataSource.insertItems(changes.insertedItems.map { item in
                             (item: item.cellData, indexPath: toIndexPath(item.index))
                         })
                     }
-                    
+
                     // 3. Updating items
                     let indexPathsToUpdate = changes.updatedItems.map { toIndexPath($0.index) }
-                    
+
                     if indexPathsToUpdate.count > 0 {
                         collectionView.reloadItems(at: indexPathsToUpdate)
-                        
+
                         changes.updatedItems.forEach { index, newCellData in
-                            
+
                             let indexPath = toIndexPath(index)
                             let oldCellData = dataSource.item(at: indexPath)
-                            
+
                             var newCellData = newCellData
                             newCellData.selected = oldCellData.selected     // preserving selection
-                            
+
                             dataSource.replaceItem(at: indexPath, with: newCellData)
                         }
                     }
-                    
+
                     // 4. Moving items
                     changes.movedIndexes.forEach { from, to in
                         let sourceIndexPath = toIndexPath(from)
                         let targetIndexPath = toIndexPath(to)
-                        
+
                         collectionView.moveItem(at: sourceIndexPath, to: targetIndexPath)
                         dataSource.moveItem(at: sourceIndexPath, to: targetIndexPath)
                     }
-                    
-                    }, completion: { _ in
+
+                    }, completion: { [weak self] _ in
+                        self?.selectCollectionViewCellsAccordingToDataSource()
                         completion?()
-                })
+                    }
+                )
             },
             catchClosure: { _ in
                 self.recreateCollectionView()
@@ -314,14 +434,28 @@ final class PhotoLibraryV2View: UIView, UICollectionViewDelegateFlowLayout, Them
         )
     }
     
-    func deselectCell(with imageSource: ImageSource) {
+    func deselectCell(with imageSource: ImageSource) -> Bool {
         if let indexPath = dataSource.indexPath(where: { $0.image == imageSource }) {
             deselectCell(at: indexPath)
+            return true
+        } else {
+            return false
         }
     }
     
     func deselectAndAdjustAllCells() {
         collectionView.indexPathsForSelectedItems?.forEach { deselectCell(at: $0) }
+    }
+    
+    func reloadSelectedItems() {
+        guard let indexPathsForSelectedItems = collectionView.indexPathsForSelectedItems else { return }
+        
+        collectionView.reloadItems(at: indexPathsForSelectedItems)
+        
+        // Restore selection after reload
+        for indexPath in indexPathsForSelectedItems {
+            collectionView.selectItem(at: indexPath, animated: false, scrollPosition: [])
+        }
     }
     
     func setTitle(_ title: String) {
@@ -367,7 +501,7 @@ final class PhotoLibraryV2View: UIView, UICollectionViewDelegateFlowLayout, Them
     
     func setHeaderVisible(_ visible: Bool) {
         guard layout.hasHeader != visible else {
-            return 
+            return
         }
         collectionView.performBatchUpdates { [weak self] in
             self?.layout.hasHeader = visible
@@ -411,18 +545,48 @@ final class PhotoLibraryV2View: UIView, UICollectionViewDelegateFlowLayout, Them
         }
     }
     
+    func setSelectedPhotosBarState(_ state: SelectedPhotosBarState) {
+        switch state {
+        case .hidden:
+            selectedPhotosBarView.setHidden(true, animated: true)
+        case .placeholder:
+            selectedPhotosBarView.setPlaceholderHidden(false)
+        case .visible(let data):
+            selectedPhotosBarView.setPlaceholderHidden(true)
+            selectedPhotosBarView.setHidden(false, animated: true)
+            selectedPhotosBarView.label.text = data.countString
+            selectedPhotosBarView.setLastImage(data.lastPhoto)
+            selectedPhotosBarView.setPenultimateImage(data.penultimatePhoto)
+        }
+    }
+    
+    func setDoneButtonTitle(_ title: String) {
+        selectedPhotosBarView.setDoneButtonTitle(title)
+    }
+    
+    func setPlaceholderText(_ text: String) {
+        selectedPhotosBarView.setPlaceholderText(text)
+    }
+    
     // MARK: - UICollectionViewDelegate
     
-    func collectionView(_ collectionView: UICollectionView, willDisplay cell: UICollectionViewCell, forItemAt indexPath: IndexPath) {
+    func collectionView(
+        _ collectionView: UICollectionView,
+        willDisplay cell: UICollectionViewCell,
+        forItemAt indexPath: IndexPath)
+    {
         adjustDimmingForCell(cell)
     }
     
     func collectionView(_ collectionView: UICollectionView, shouldSelectItemAt indexPath: IndexPath) -> Bool {
         let cellData = dataSource.item(at: indexPath)
+        let shouldSelect = canSelectMoreItems && cellData.previewAvailable
         
-        cellData.onSelectionPrepare?()
+        if shouldSelect {
+            cellData.onSelectionPrepare?()
+        }
         
-        return canSelectMoreItems && cellData.previewAvailable
+        return shouldSelect
     }
     
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
@@ -433,10 +597,22 @@ final class PhotoLibraryV2View: UIView, UICollectionViewDelegateFlowLayout, Them
         dataSource.item(at: indexPath).onSelect?()
         
         adjustDimmingForCellAtIndexPath(indexPath)
+        
+        if let cell = collectionView.cellForItem(at: indexPath) as? PhotoLibraryItemCell, isNewFlowPrototype {
+            let data = dataSource.item(at: indexPath)
+            cell.setSelectionIndex(data.getSelectionIndex?())
+            cell.adjustAppearanceForSelected(true, animated: true)
+        }
     }
     
     func collectionView(_ collectionView: UICollectionView, didDeselectItemAt indexPath: IndexPath) {
         onDeselectItem(at: indexPath)
+        
+        if let cell = collectionView.cellForItem(at: indexPath) as? PhotoLibraryItemCell, isNewFlowPrototype {
+            let data = dataSource.item(at: indexPath)
+            cell.setSelectionIndex(data.getSelectionIndex?())
+            cell.adjustAppearanceForSelected(false, animated: true)
+        }
     }
     
     // MARK: - Private
@@ -467,7 +643,8 @@ final class PhotoLibraryV2View: UIView, UICollectionViewDelegateFlowLayout, Them
         accessibilityIdentifier = AccessibilityId.photoLibrary.rawValue
         
         closeButton.accessibilityIdentifier = AccessibilityId.discardLibraryButton.rawValue
-        continueButton.accessibilityIdentifier = AccessibilityId.confirmLibraryButton.rawValue
+        topRightContinueButton.accessibilityIdentifier = AccessibilityId.confirmLibraryButton.rawValue
+        bottomContinueButton.accessibilityIdentifier = AccessibilityId.confirmLibraryButton.rawValue
     }
     
     private func setUpButtons() {
@@ -478,13 +655,16 @@ final class PhotoLibraryV2View: UIView, UICollectionViewDelegateFlowLayout, Them
             for: .touchUpInside
         )
         
-        continueButton.size = CGSize(
-            width: continueButtonHeight,
-            height: continueButton.sizeThatFits().width
+        topRightContinueButton.contentEdgeInsets = continueButtonContentInsets
+        topRightContinueButton.addTarget(
+            self,
+            action: #selector(onContinueButtonTap(_:)),
+            for: .touchUpInside
         )
         
-        continueButton.contentEdgeInsets = continueButtonContentInsets
-        continueButton.addTarget(
+        bottomContinueButton.layer.cornerRadius = 5
+        bottomContinueButton.titleEdgeInsets = UIEdgeInsets(top: 12, left: 16, bottom: 14, right: 16)
+        bottomContinueButton.addTarget(
             self,
             action: #selector(onContinueButtonTap(_:)),
             for: .touchUpInside
@@ -497,14 +677,16 @@ final class PhotoLibraryV2View: UIView, UICollectionViewDelegateFlowLayout, Them
         collectionView.delegate = self
         collectionView.allowsMultipleSelection = true
         collectionView.alwaysBounceVertical = true
+        
         collectionView.register(
             PhotoLibraryItemCell.self,
             forCellWithReuseIdentifier: dataSource.cellReuseIdentifier
         )
+        
         if let headerReuseIdentifier = dataSource.headerReuseIdentifier {
             collectionView.register(
                 PhotoLibraryCameraView.self,
-                forSupplementaryViewOfKind: UICollectionElementKindSectionHeader,
+                forSupplementaryViewOfKind: UICollectionView.elementKindSectionHeader,
                 withReuseIdentifier: headerReuseIdentifier
             )
         }
@@ -522,7 +704,7 @@ final class PhotoLibraryV2View: UIView, UICollectionViewDelegateFlowLayout, Them
         collectionView.removeFromSuperview()
         collectionView = UICollectionView(frame: .zero, collectionViewLayout: layout)
         setUpCollectionView()
-        addSubview(collectionView)
+        insertSubview(collectionView, belowSubview: placeholderView)
         
         // Display a collection view snapshot to improve user experience
         if let snapshot = collectionViewSnapshot {
@@ -530,7 +712,7 @@ final class PhotoLibraryV2View: UIView, UICollectionViewDelegateFlowLayout, Them
         }
         
         // Reload the data in a non-animated fashion
-        collectionView.reloadData()
+        reloadDataPreservingSelection()
         
         // Add a delay before scrolling to previously visible bounds, or it will not work
         OperationQueue.main.addOperation {
@@ -546,6 +728,18 @@ final class PhotoLibraryV2View: UIView, UICollectionViewDelegateFlowLayout, Them
                     collectionViewSnapshot?.removeFromSuperview()
                 }
             )
+        }
+    }
+    
+    private func reloadDataPreservingSelection() {
+        collectionView.reloadData()
+        selectCollectionViewCellsAccordingToDataSource()
+    }
+    
+    private func selectCollectionViewCellsAccordingToDataSource() {
+        // TODO: Сейчас тут замедляется UI на огромных галереях из-за итерирования по всем айтемам
+        for indexPath in dataSource.indexPaths(where: { $0.selected }) {
+            collectionView.selectItem(at: indexPath, animated: false, scrollPosition: [])
         }
     }
     
@@ -572,6 +766,10 @@ final class PhotoLibraryV2View: UIView, UICollectionViewDelegateFlowLayout, Them
     {
         cell.backgroundColor = theme?.photoCellBackgroundColor
         cell.selectedBorderColor = theme?.photoLibraryItemSelectionColor
+        cell.selectionIndexFont = theme?.librarySelectionIndexFont
+        cell.isRedesign = isNewFlowPrototype
+        cell.setBadgeTextColor(theme?.libraryItemBadgeTextColor)
+        cell.setBadgeBackgroundColor(theme?.libraryItemBadgeBackgroundColor)
         
         cell.setCloudIcon(theme?.iCloudIcon)
         
@@ -582,10 +780,10 @@ final class PhotoLibraryV2View: UIView, UICollectionViewDelegateFlowLayout, Them
         }
         
         cell.setAccessibilityId(index: indexPath.row)
-
-        // Без этого костыля невозможно снять выделение с preselected ячейки
-        if data.selected {
-            collectionView.selectItem(at: indexPath, animated: false, scrollPosition: [])
+        
+        if isNewFlowPrototype {
+            cell.setSelectionIndex(data.getSelectionIndex?())
+            cell.adjustAppearanceForSelected(data.selected, animated: false)
         }
     }
     
@@ -639,9 +837,28 @@ final class PhotoLibraryV2View: UIView, UICollectionViewDelegateFlowLayout, Them
         )
     }
     
+    private func layOutTopRightContinueButton() {
+        let width = topRightContinueButton.sizeThatFits().width
+        
+        topRightContinueButton.frame = CGRect(
+            x: bounds.right - 8 - width,
+            y: max(8, paparazzoSafeAreaInsets.top),
+            width: width,
+            height: continueButtonHeight
+        )
+    }
+    
     private func deselectCell(at indexPath: IndexPath) {
         collectionView.deselectItem(at: indexPath, animated: false)
+        
         onDeselectItem(at: indexPath)
+        
+        // TODO: убрать дублирование
+        if let cell = collectionView.cellForItem(at: indexPath) as? PhotoLibraryItemCell, isNewFlowPrototype {
+            let data = dataSource.item(at: indexPath)
+            cell.setSelectionIndex(data.getSelectionIndex?())
+            cell.adjustAppearanceForSelected(false, animated: true)
+        }
     }
     
     @objc private func onCloseButtonTap(_: UIButton) {

@@ -5,8 +5,9 @@ public protocol MediaPickerMarshrouteAssembly: class {
     func module(
         data: MediaPickerData,
         overridenTheme: PaparazzoUITheme?,
+        viewfinderOverlay: UIView?,
         routerSeed: RouterSeed,
-        isMetalEnabled: Bool,
+        isNewFlowPrototype: Bool,
         configure: (MediaPickerModule) -> ())
         -> UIViewController
 }
@@ -18,12 +19,37 @@ public protocol MediaPickerMarshrouteAssemblyFactory: class {
 public extension MediaPickerMarshrouteAssembly {
     func module(
         data: MediaPickerData,
+        overridenTheme: PaparazzoUITheme?,
         routerSeed: RouterSeed,
-        isMetalEnabled: Bool,
+        isNewFlowPrototype: Bool,
         configure: (MediaPickerModule) -> ())
         -> UIViewController
     {
-        return module(data: data, overridenTheme: nil, routerSeed: routerSeed, isMetalEnabled: isMetalEnabled, configure: configure)
+        return module(
+            data: data,
+            overridenTheme: overridenTheme,
+            viewfinderOverlay: nil,
+            routerSeed: routerSeed,
+            isNewFlowPrototype: isNewFlowPrototype,
+            configure: configure
+        )
+    }
+    
+    func module(
+        data: MediaPickerData,
+        routerSeed: RouterSeed,
+        isNewFlowPrototype: Bool,
+        configure: (MediaPickerModule) -> ())
+        -> UIViewController
+    {
+        return module(
+            data: data,
+            overridenTheme: nil,
+            viewfinderOverlay: nil,
+            routerSeed: routerSeed,
+            isNewFlowPrototype: isNewFlowPrototype,
+            configure: configure
+        )
     }
     
     func module(
@@ -32,6 +58,13 @@ public extension MediaPickerMarshrouteAssembly {
         configure: (MediaPickerModule) -> ())
         -> UIViewController
     {
-        return module(data: data, overridenTheme: nil, routerSeed: routerSeed, isMetalEnabled: false, configure: configure)
+        return module(
+            data: data,
+            overridenTheme: nil,
+            viewfinderOverlay: nil,
+            routerSeed: routerSeed,
+            isNewFlowPrototype: false,
+            configure: configure
+        )
     }
 }

@@ -21,3 +21,7 @@
 
 // Cropping
 "Cropping" = "Кадрирование";
+
+"Done" = "Готово";
+"Place the object inside the frame and take a photo" = "Разместите объект внутри рамки и сделайте фото";
+"Select at least one photo" = "Вы не выбрали ни одного фото";

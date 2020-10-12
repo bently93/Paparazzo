@@ -20,7 +20,10 @@ public class LocationProviderImpl: NSObject, LocationProvider, CLLocationManager
         switch CLLocationManager.authorizationStatus() {
         case .authorizedAlways, .authorizedWhenInUse:
             getLocationWhenAuthorized(completion: completion)
-        default:
+        case .notDetermined, .denied, .restricted:
+            completion(nil)
+        @unknown default:
+            assertionFailure("Unknown authorization status")
             completion(nil)
         }
     }

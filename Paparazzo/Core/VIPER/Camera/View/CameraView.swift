@@ -51,17 +51,19 @@ final class CameraView: UIView, CameraViewInput, ThemeConfigurable {
     override func layoutSubviews() {
         super.layoutSubviews()
         
+        let labelsTargetCenterY = CGFloat(27)
+        
         accessDeniedView.bounds = bounds
         accessDeniedView.center = bounds.center
         
         cameraOutputView?.frame = bounds
         
         titleLabel.sizeToFit()
-        titleLabel.centerX = bounds.centerX
-        let hasSubtitle = (subtitleLabel.text?.count ?? 0) > 0
-        titleLabel.top = hasSubtitle ? 9 : 17
-        
         subtitleLabel.sizeToFit()
+        
+        titleLabel.centerX = bounds.centerX
+        titleLabel.top = floor(labelsTargetCenterY - (titleLabel.height + subtitleLabel.height) / 2)
+        
         subtitleLabel.centerX = bounds.centerX
         subtitleLabel.top = titleLabel.bottom
         
@@ -135,8 +137,7 @@ final class CameraView: UIView, CameraViewInput, ThemeConfigurable {
         
         let newCameraOutputView = CameraOutputView(
             captureSession: parameters.captureSession,
-            outputOrientation: parameters.orientation,
-            isMetalEnabled: parameters.isMetalEnabled
+            outputOrientation: parameters.orientation
         )
         
         if UIDevice.systemVersionLessThan(version: "9.0"), let currentCameraOutputView = self.cameraOutputView {
@@ -154,9 +155,10 @@ final class CameraView: UIView, CameraViewInput, ThemeConfigurable {
         
         addSubview(newCameraOutputView)
         
-        bringSubview(toFront: titleLabel)
-        bringSubview(toFront: subtitleLabel)
-        bringSubview(toFront: hintLabel)
+        bringSubviewToFront(titleLabel)
+        bringSubviewToFront(subtitleLabel)
+        bringSubviewToFront(hintLabel)
+        
         self.cameraOutputView = newCameraOutputView
         self.outputParameters = parameters
     }
@@ -187,7 +189,7 @@ final class CameraView: UIView, CameraViewInput, ThemeConfigurable {
         
         let attributedString = NSMutableAttributedString(string: text)
         attributedString.addAttribute(
-            NSAttributedStringKey.paragraphStyle,
+            NSAttributedString.Key.paragraphStyle,
             value: style,
             range: NSRange(location: 0, length: attributedString.length)
         )

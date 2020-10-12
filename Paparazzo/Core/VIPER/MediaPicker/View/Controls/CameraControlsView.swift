@@ -14,6 +14,7 @@ final class CameraControlsView: UIView, ThemeConfigurable {
     // MARK: - Subviews
     
     private let photoView = UIImageView()
+    private let photoOverlayView = UIView()
     private let shutterButton = UIButton()
     private let cameraToggleButton = UIButton()
     private let flashButton = UIButton()
@@ -51,6 +52,12 @@ final class CameraControlsView: UIView, ThemeConfigurable {
             action: #selector(onPhotoViewTap(_:))
         ))
         
+        photoOverlayView.backgroundColor = .black
+        photoOverlayView.alpha = 0.04
+        photoOverlayView.layer.cornerRadius = photoViewDiameter / 2
+        photoOverlayView.clipsToBounds = true
+        photoOverlayView.isUserInteractionEnabled = false
+        
         shutterButton.backgroundColor = .blue
         shutterButton.clipsToBounds = false
         shutterButton.addTarget(
@@ -77,6 +84,7 @@ final class CameraControlsView: UIView, ThemeConfigurable {
         )
         
         addSubview(photoView)
+        addSubview(photoOverlayView)
         addSubview(shutterButton)
         addSubview(flashButton)
         addSubview(cameraToggleButton)
@@ -98,10 +106,10 @@ final class CameraControlsView: UIView, ThemeConfigurable {
     override func layoutSubviews() {
         super.layoutSubviews()
         
-        let contentHeight = UIEdgeInsetsInsetRect(bounds, insets).size.height
+        let contentHeight = bounds.inset(by: insets).size.height
         let shutterButtonDiameter = max(shutterButtonMinDiameter, min(shutterButtonMaxDiameter, contentHeight))
         let shutterButtonSize = CGSize(width: shutterButtonDiameter, height: shutterButtonDiameter)
-        let centerY = bounds.centerY - paparazzoSafeAreaInsets.bottom / 2
+        let centerY = bounds.centerY
         
         shutterButton.frame = CGRect(origin: .zero, size: shutterButtonSize)
         shutterButton.center = CGPoint(x: bounds.midX, y: centerY)
@@ -118,6 +126,8 @@ final class CameraControlsView: UIView, ThemeConfigurable {
         photoView.size = CGSize(width: photoViewDiameter, height: photoViewDiameter)
         photoView.left = bounds.left + insets.left
         photoView.centerY = centerY
+        
+        photoOverlayView.frame = photoView.frame
     }
     
     // MARK: - CameraControlsView
@@ -166,6 +176,7 @@ final class CameraControlsView: UIView, ThemeConfigurable {
     }
     
     func setPhotoLibraryButtonVisible(_ visible: Bool) {
+        photoOverlayView.isHidden = !visible
         photoView.isHidden = !visible
     }
     
@@ -175,6 +186,8 @@ final class CameraControlsView: UIView, ThemeConfigurable {
         
         self.theme = theme
 
+        backgroundColor = theme.cameraControlsViewBackgroundColor
+        
         flashButton.setImage(theme.flashOffIcon, for: .normal)
         flashButton.setImage(theme.flashOnIcon, for: .selected)
 

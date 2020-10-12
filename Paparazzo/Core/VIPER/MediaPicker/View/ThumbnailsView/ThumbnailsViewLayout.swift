@@ -1,29 +1,57 @@
 import UIKit
 
-final class ThumbnailsViewLayout: UICollectionViewFlowLayout {
+final class ThumbnailsViewLayout: UICollectionViewLayout {
     
     var itemsTransform = CGAffineTransform.identity
     var hapticFeedbackEnabled = false
+    var sectionInset = UIEdgeInsets.zero
+    var spacing = CGFloat(0)
     
     private var longPressGestureRecognizer: UILongPressGestureRecognizer?
     private var originalIndexPath: IndexPath?
     private var draggingIndexPath: IndexPath?
     private var draggingView: UIView?
     private var dragOffset = CGPoint.zero
+    private var attributes = [IndexPath: UICollectionViewLayoutAttributes]()
+    private var contentSize = CGSize.zero
     
     var onDragStart: (() -> ())?
     var onDragFinish: (() -> ())?
     
-    override init() {
-        super.init()
-    }
-    
-    required init?(coder aDecoder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-    
     override func prepare() {
         super.prepare()
+        
+        attributes.removeAll()
+        
+        let itemsCount = collectionView?.numberOfItems(inSection: 0) ?? 0
+        let collectionViewBounds = collectionView?.bounds ?? .zero
+        let height = collectionViewBounds.size.height - sectionInset.top - sectionInset.bottom
+        let width = height
+        var maxX = CGFloat(0)
+        
+        for index in 0..<itemsCount {
+            
+            let indexPath = IndexPath(item: index, section: 0)
+            let frame = CGRect(
+                centerX: sectionInset.left + width / 2 + CGFloat(index) * (width + spacing),
+                centerY: collectionViewBounds.midY,
+                width: width,
+                height: height
+            )
+            
+            let cellAttributes = UICollectionViewLayoutAttributes(forCellWith: indexPath)
+            cellAttributes.bounds = CGRect(origin: .zero, size: frame.size)
+            cellAttributes.center = frame.center
+            
+            attributes[indexPath] = cellAttributes
+            
+            maxX = frame.maxX
+        }
+        
+        contentSize = CGSize(
+            width: maxX + sectionInset.right,
+            height: collectionViewBounds.height
+        )
         
         setUpGestureRecognizer()
     }
@@ -47,32 +75,35 @@ final class ThumbnailsViewLayout: UICollectionViewFlowLayout {
     }
     
     // MARK: - UICollectionViewLayout
+    override var collectionViewContentSize: CGSize {
+        return contentSize
+    }
+    
+    override func shouldInvalidateLayout(forBoundsChange newBounds: CGRect) -> Bool {
+        return newBounds != collectionView?.bounds
+    }
     
     override func layoutAttributesForItem(at indexPath: IndexPath) -> UICollectionViewLayoutAttributes? {
-        let attributes = super.layoutAttributesForItem(at: indexPath)
+        guard let attributes = self.attributes[indexPath] else { return nil }
         adjustAttributes(attributes)
         return attributes
     }
     
     override func layoutAttributesForElements(in rect: CGRect) -> [UICollectionViewLayoutAttributes]? {
-        
-        let attributes = super.layoutAttributesForElements(in: rect)
-        
-        attributes?.forEach { attributes in
-            
-            let delegate = collectionView?.delegate as? MediaRibbonLayoutDelegate
-            let shouldApplyTransform = delegate?.shouldApplyTransformToItemAtIndexPath(attributes.indexPath) ?? true
-            
-            attributes.transform = shouldApplyTransform ? itemsTransform : .identity
-        }
-        
+        let attributes = self.attributes.filter { $1.frame.intersects(rect) }.map { $1 }
+        attributes.forEach { adjustAttributes($0) }
         return attributes
     }
     
     // MARK: - Private
     
     private func adjustAttributes(_ attributes: UICollectionViewLayoutAttributes?) {
-        attributes?.transform = itemsTransform
+        guard let attributes = attributes else { return }
+        
+        let delegate = collectionView?.delegate as? MediaRibbonLayoutDelegate
+        let shouldApplyTransform = delegate?.shouldApplyTransformToItemAtIndexPath(attributes.indexPath) ?? true
+        
+        attributes.transform = shouldApplyTransform ? itemsTransform : .identity
     }
     
     @objc private func onLongPress(_ gestureRecognizer: UILongPressGestureRecognizer) {
@@ -154,7 +185,7 @@ final class ThumbnailsViewLayout: UICollectionViewFlowLayout {
             animations: {
                 dragView.center = targetCenter
                 dragView.transform = self.itemsTransform
-        },
+            },
             completion: { _ in
                 cell.isHidden = false
                 dragView.removeFromSuperview()
@@ -264,7 +295,7 @@ final class ThumbnailsViewLayout: UICollectionViewFlowLayout {
         
         let displayLink = CADisplayLink(target: self, selector: #selector(onContinuousScroll))
         displayLink.frameInterval = 1
-        displayLink.add(to: RunLoop.main, forMode: RunLoopMode.commonModes)
+        displayLink.add(to: RunLoop.main, forMode: RunLoop.Mode.common)
         self.displayLink = displayLink
     }
     

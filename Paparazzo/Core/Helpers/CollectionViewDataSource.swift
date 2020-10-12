@@ -94,7 +94,13 @@ final class CollectionViewDataSource<CellType: Customizable>: NSObject, UICollec
     }
     
     func indexPath(where findItem: (ItemType) -> Bool) -> IndexPath? {
-        return items.index(where: findItem).flatMap { IndexPath(item: $0, section: 0) }
+        return items.firstIndex(where: findItem).flatMap { IndexPath(item: $0, section: 0) }
+    }
+    
+    func indexPaths(where findItem: (ItemType) -> Bool) -> [IndexPath] {
+        return items.enumerated()
+            .compactMap { findItem($0.element) ? $0.offset : nil }
+            .map { IndexPath(item: $0, section: 0) }
     }
     
     // MARK: - UICollectionViewDataSource
@@ -121,7 +127,7 @@ final class CollectionViewDataSource<CellType: Customizable>: NSObject, UICollec
         viewForSupplementaryElementOfKind kind: String,
         at indexPath: IndexPath) -> UICollectionReusableView
     {
-        guard let headerReuseIdentifier = headerReuseIdentifier, kind == UICollectionElementKindSectionHeader else {
+        guard let headerReuseIdentifier = headerReuseIdentifier, kind == UICollectionView.elementKindSectionHeader else {
             preconditionFailure("Invalid supplementary view type for this collection view")
         }
         

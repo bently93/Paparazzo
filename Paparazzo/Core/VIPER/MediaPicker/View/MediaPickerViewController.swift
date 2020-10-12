@@ -10,6 +10,9 @@ final class MediaPickerViewController: PaparazzoViewController, MediaPickerViewI
     private var isAnimatingTransition: Bool = false
     
     // MARK: - UIViewController
+    override var preferredStatusBarStyle: UIStatusBarStyle {
+        return view.paparazzoSafeAreaInsets.top > 0 ? .lightContent : .default
+    }
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -25,7 +28,7 @@ final class MediaPickerViewController: PaparazzoViewController, MediaPickerViewI
         
         navigationController?.setNavigationBarHidden(true, animated: animated)
         
-        if !UIDevice.current.isIPhoneX {
+        if !UIDevice.current.hasTopSafeAreaInset {
             UIApplication.shared.setStatusBarHidden(true, with: .fade)
         }
         
@@ -106,7 +109,7 @@ final class MediaPickerViewController: PaparazzoViewController, MediaPickerViewI
         super.viewWillTransition(to: size, with: coordinator)
     }
     
-    override open var shouldAutorotate: Bool {
+    override public var shouldAutorotate: Bool {
         if UIDevice.current.userInterfaceIdiom == .pad {
             return true
         } else {
@@ -114,7 +117,7 @@ final class MediaPickerViewController: PaparazzoViewController, MediaPickerViewI
         }
     }
     
-    override open var supportedInterfaceOrientations: UIInterfaceOrientationMask {
+    override public var supportedInterfaceOrientations: UIInterfaceOrientationMask {
         if UIDevice.current.userInterfaceIdiom == .pad {
             return .all
         } else {
@@ -122,7 +125,7 @@ final class MediaPickerViewController: PaparazzoViewController, MediaPickerViewI
         }
     }
     
-    override open var preferredInterfaceOrientationForPresentation: UIInterfaceOrientation {
+    override public var preferredInterfaceOrientationForPresentation: UIInterfaceOrientation {
         if UIDevice.current.userInterfaceIdiom == .pad {
             return super.preferredInterfaceOrientationForPresentation
         } else {
@@ -131,7 +134,7 @@ final class MediaPickerViewController: PaparazzoViewController, MediaPickerViewI
     }
     
     override var prefersStatusBarHidden: Bool {
-        return !UIDevice.current.isIPhoneX
+        return !UIDevice.current.hasTopSafeAreaInset
     }
     
     // MARK: - MediaPickerViewInput
@@ -251,6 +254,10 @@ final class MediaPickerViewController: PaparazzoViewController, MediaPickerViewI
     
     func setContinueButtonStyle(_ style: MediaPickerContinueButtonStyle) {
         mediaPickerView.setContinueButtonStyle(style)
+    }
+    
+    func setContinueButtonPlacement(_ placement: MediaPickerContinueButtonPlacement) {
+        mediaPickerView.setContinueButtonPlacement(placement)
     }
     
     func adjustForDeviceOrientation(_ orientation: DeviceOrientation) {
@@ -379,6 +386,10 @@ final class MediaPickerViewController: PaparazzoViewController, MediaPickerViewI
     
     func setShowPreview(_ showPreview: Bool) {
         mediaPickerView.setShowsPreview(showPreview)
+    }
+    
+    func setViewfinderOverlay(_ overlay: UIView?) {
+        mediaPickerView.setViewfinderOverlay(overlay)
     }
     
     // MARK: - Private

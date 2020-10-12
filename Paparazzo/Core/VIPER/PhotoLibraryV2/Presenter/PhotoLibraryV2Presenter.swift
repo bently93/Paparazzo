@@ -7,20 +7,26 @@ final class PhotoLibraryV2Presenter: PhotoLibraryV2Module {
     private let interactor: PhotoLibraryV2Interactor
     private let router: PhotoLibraryV2Router
     private let overridenTheme: PaparazzoUITheme
-    private let isMetalEnabled: Bool
+    private let isNewFlowPrototype: Bool
     
     weak var mediaPickerModule: MediaPickerModule?
     
     weak var view: PhotoLibraryV2ViewInput? {
         didSet {
             view?.onViewDidLoad = { [weak self] in
+                self?.onViewDidLoad?()
                 self?.setUpView()
             }
         }
     }
     
+    // MARK: - Config
+    private let shouldAllowFinishingWithNoPhotos: Bool
+    
     // MARK: - State
-    var shouldScrollToTopOnFullReload = true
+    private var shouldScrollToTopOnFullReload = true
+    private var continueButtonPlacement: MediaPickerContinueButtonPlacement?
+    private var continueButtonTitle: String?
     
     // MARK: - Init
     
@@ -28,12 +34,19 @@ final class PhotoLibraryV2Presenter: PhotoLibraryV2Module {
         interactor: PhotoLibraryV2Interactor,
         router: PhotoLibraryV2Router,
         overridenTheme: PaparazzoUITheme,
-        isMetalEnabled: Bool)
+        isNewFlowPrototype: Bool)
     {
         self.interactor = interactor
         self.router = router
         self.overridenTheme = overridenTheme
-        self.isMetalEnabled = isMetalEnabled
+        self.isNewFlowPrototype = isNewFlowPrototype
+        self.shouldAllowFinishingWithNoPhotos = !interactor.selectedItems.isEmpty
+        
+        if isNewFlowPrototype {
+            interactor.observeSelectedItemsChange { [weak self] in
+                self?.adjustSelectedPhotosBar()
+            }
+        }
     }
     
     // MARK: - PhotoLibraryV2Module
@@ -46,8 +59,10 @@ final class PhotoLibraryV2Presenter: PhotoLibraryV2Module {
     var onCropFinish: (() -> ())?
     var onCropCancel: (() -> ())?
     var onContinueButtonTap: (() -> ())?
+    var onViewDidLoad: (() -> ())?
     var onCancel: (() -> ())?
     var onFinish: (([MediaPickerItem]) -> ())?
+    var onNewCameraShow: (() -> ())?
     
     func setContinueButtonTitle(_ title: String) {
         continueButtonTitle = title
@@ -64,6 +79,12 @@ final class PhotoLibraryV2Presenter: PhotoLibraryV2Module {
     
     func setContinueButtonStyle(_ style: MediaPickerContinueButtonStyle) {
         mediaPickerModule?.setContinueButtonStyle(style)
+        view?.setContinueButtonStyle(style)
+    }
+    
+    func setContinueButtonPlacement(_ placement: MediaPickerContinueButtonPlacement) {
+        continueButtonPlacement = placement
+        view?.setContinueButtonPlacement(placement)
     }
     
     public func setCameraTitle(_ title: String) {
@@ -115,8 +136,6 @@ final class PhotoLibraryV2Presenter: PhotoLibraryV2Module {
     }
     
     // MARK: - Private
-    private var continueButtonTitle: String?
-    
     private func setUpView() {
         
         updateContinueButtonTitle()
@@ -128,8 +147,21 @@ final class PhotoLibraryV2Presenter: PhotoLibraryV2Module {
         view?.setAccessDeniedTitle(localized("To pick photo from library"))
         view?.setAccessDeniedMessage(localized("Allow %@ to access your photo library", appName()))
         view?.setAccessDeniedButtonTitle(localized("Allow access to photo library"))
+        view?.setDoneButtonTitle(localized("Done"))
+        view?.setPlaceholderText(localized("Select at least one photo"))
         
         view?.setProgressVisible(true)
+        
+        view?.setContinueButtonVisible(!isNewFlowPrototype)
+        
+        if isNewFlowPrototype {
+            view?.onViewWillAppear = { [weak self] in
+                DispatchQueue.main.async {
+                    self?.adjustSelectedPhotosBar()
+                    self?.view?.reloadSelectedItems()
+                }
+            }
+        }
         
         interactor.observeAuthorizationStatus { [weak self] accessGranted in
             self?.view?.setAccessDeniedViewVisible(!accessGranted)
@@ -189,54 +221,37 @@ final class PhotoLibraryV2Presenter: PhotoLibraryV2Module {
         }
         
         view?.onContinueButtonTap = { [weak self] in
-            if let strongSelf = self {
-                let selectedItems = strongSelf.interactor.selectedItems
-                guard selectedItems.isEmpty == false else {
-                    self?.onFinish?([])
-                    return
-                }
-                
-                let mediaPickerItems = selectedItems.map {
-                    MediaPickerItem(
-                        image: $0.image,
-                        source: .photoLibrary
-                    )
-                }
-                let startIndex = 0
-                self?.onItemsAdd?(
-                    mediaPickerItems,
-                    startIndex
-                )
-                
-                let data = strongSelf.interactor.mediaPickerData.bySettingPhotoLibraryItems(
-                    selectedItems
-                )
-                
-                self?.router.showMediaPicker(
-                    data: data,
-                    overridenTheme: strongSelf.overridenTheme,
-                    isMetalEnabled: strongSelf.isMetalEnabled,
-                    configure: { [weak self] module in
-                        weak var weakModule = module
-                        self?.mediaPickerModule = module
-                        module.onItemsAdd = self?.onItemsAdd
-                        module.onItemUpdate = self?.onItemUpdate
-                        module.onItemAutocorrect = self?.onItemAutocorrect
-                        module.onItemMove = self?.onItemMove
-                        module.onItemRemove = { mediaPickerItem, index in
-                            self?.view?.deselectItem(with: mediaPickerItem.image)
-                            self?.onItemRemove?(mediaPickerItem, index)
-                        }
-                        module.onCropFinish = self?.onCropFinish
-                        module.onCropCancel = self?.onCropCancel
-                        module.onContinueButtonTap = self?.onContinueButtonTap
-                        module.onCancel = {
-                            weakModule?.dismissModule()
-                        }
-                        
-                        module.onFinish = self?.onFinish
-                })
+            guard let strongSelf = self else { return }
+            
+            let selectedItems = strongSelf.interactor.selectedItems
+            
+            guard selectedItems.isEmpty == false else {
+                strongSelf.onFinish?([])
+                return
             }
+            
+            let startIndex = 0
+            
+            self?.onItemsAdd?(
+                selectedItems,
+                startIndex
+            )
+            
+            guard !strongSelf.isNewFlowPrototype else {
+                strongSelf.onFinish?(selectedItems)
+                return
+            }
+            
+            let data = strongSelf.interactor.mediaPickerData.bySettingMediaPickerItems(selectedItems)
+            
+            self?.router.showMediaPicker(
+                data: data,
+                overridenTheme: strongSelf.overridenTheme,
+                isNewFlowPrototype: strongSelf.isNewFlowPrototype,
+                configure: { [weak self] module in
+                    self?.configureMediaPicker(module)
+                }
+            )
         }
         
         view?.onCloseButtonTap = { [weak self] in
@@ -244,9 +259,13 @@ final class PhotoLibraryV2Presenter: PhotoLibraryV2Module {
         }
         
         view?.onAccessDeniedButtonTap = {
-            if let url = URL(string: UIApplicationOpenSettingsURLString) {
+            if let url = URL(string: UIApplication.openSettingsURLString) {
                 UIApplication.shared.openURL(url)
             }
+        }
+        
+        view?.onLastPhotoThumbnailTap = { [weak self] in
+            self?.showMediaPickerInNewFlow()
         }
         
         view?.onTitleTap = { [weak self] in
@@ -262,6 +281,25 @@ final class PhotoLibraryV2Presenter: PhotoLibraryV2Module {
                 self?.view?.setCameraViewData(viewData)
             }
         }
+    }
+    
+    private func showMediaPickerInNewFlow() {
+        
+        let data = interactor.mediaPickerData
+            .bySettingMediaPickerItems(interactor.selectedItems)
+            .bySelectingLastItem()
+        
+        router.showMediaPicker(
+            data: data,
+            overridenTheme: overridenTheme,
+            isNewFlowPrototype: true,
+            configure: { [weak self] module in
+                self?.configureMediaPicker(module)
+                module.onFinish = { _ in
+                    self?.router.focusOnCurrentModule()
+                }
+            }
+        )
     }
     
     private func updateContinueButtonTitle() {
@@ -311,9 +349,18 @@ final class PhotoLibraryV2Presenter: PhotoLibraryV2Module {
     
     private func cellData(_ item: PhotoLibraryItem) -> PhotoLibraryItemCellData {
         
-        var cellData = PhotoLibraryItemCellData(image: item.image)
+        let mediaPickerItem = MediaPickerItem(item)
+        
+        let getSelectionIndex = { [weak self] in
+            self?.interactor.selectedItems.firstIndex(of: mediaPickerItem).flatMap { $0 + 1 }
+        }
+        
+        var cellData = PhotoLibraryItemCellData(
+            image: item.image,
+            getSelectionIndex: isNewFlowPrototype ? getSelectionIndex : nil
+        )
 
-        cellData.selected = interactor.isSelected(item)
+        cellData.selected = interactor.isSelected(mediaPickerItem)
         
         cellData.onSelectionPrepare = { [weak self] in
             if let selectionState = self?.interactor.prepareSelection() {
@@ -322,57 +369,128 @@ final class PhotoLibraryV2Presenter: PhotoLibraryV2Module {
         }
         
         cellData.onSelect = { [weak self] in
-            if let selectionState = self?.interactor.selectItem(item) {
+            if let selectionState = self?.interactor.selectItem(mediaPickerItem) {
                 self?.adjustViewForSelectionState(selectionState)
             }
             
-            self?.view?.setHeaderVisible(false)
+            if self?.isNewFlowPrototype == false {
+                self?.view?.setHeaderVisible(false)
+            }
+            
             self?.updateContinueButtonTitle()
         }
         
         cellData.onDeselect = { [weak self] in
-            if let selectionState = self?.interactor.deselectItem(item) {
-                self?.adjustViewForSelectionState(selectionState)
-            }
-            let hasNoItems = self?.interactor.selectedItems.isEmpty == true
-            self?.view?.setHeaderVisible(hasNoItems)
-            self?.updateContinueButtonTitle()
+            self?.handleItemDeselect(mediaPickerItem)
         }
         
         return cellData
     }
     
+    private func handleItemDeselect(_ item: MediaPickerItem) {
+        
+        let selectionState = interactor.deselectItem(item)
+        
+        adjustViewForSelectionState(selectionState)
+        
+        if isNewFlowPrototype {
+            view?.reloadSelectedItems()
+        } else {
+            view?.setHeaderVisible(interactor.selectedItems.isEmpty)
+        }
+        
+        updateContinueButtonTitle()
+    }
+    
     private func cameraViewData(completion: @escaping (_ viewData: PhotoLibraryCameraViewData?) -> ()) {
-        interactor.getOutputParameters { parameters in
+        interactor.getOutputParameters { [shouldAllowFinishingWithNoPhotos] parameters in
             let viewData = PhotoLibraryCameraViewData(
                 parameters: parameters,
                 onTap: { [weak self] in
                     guard let strongSelf = self else { return }
-                    self?.router.showMediaPicker(
-                        data: strongSelf.interactor.mediaPickerData.byDisablingLibrary(),
-                        overridenTheme: strongSelf.overridenTheme,
-                        isMetalEnabled: strongSelf.isMetalEnabled,
-                        configure: { [weak self] module in
-                            weak var weakModule = module
-                            self?.mediaPickerModule = module
-                            module.onItemsAdd = self?.onItemsAdd
-                            module.onItemUpdate = self?.onItemUpdate
-                            module.onItemAutocorrect = self?.onItemAutocorrect
-                            module.onItemMove = self?.onItemMove
-                            module.onItemRemove = self?.onItemRemove
-                            module.onCropFinish = self?.onCropFinish
-                            module.onCropCancel = self?.onCropCancel
-                            module.onContinueButtonTap = self?.onContinueButtonTap
-                            module.onCancel = {
-                                weakModule?.dismissModule()
+                    
+                    if strongSelf.isNewFlowPrototype {
+                        self?.onNewCameraShow?()
+                        self?.router.showNewCamera(
+                            selectedImagesStorage: strongSelf.interactor.selectedPhotosStorage,
+                            mediaPickerData: strongSelf.interactor.mediaPickerData,
+                            shouldAllowFinishingWithNoPhotos: shouldAllowFinishingWithNoPhotos,
+                            configure: { [weak self] newCameraModule in
+                                newCameraModule.configureMediaPicker = { mediaPickerModule in
+                                    self?.configureMediaPicker(mediaPickerModule)
+                                    mediaPickerModule.onFinish = { [weak newCameraModule] _ in
+                                        newCameraModule?.focusOnModule()
+                                    }
+                                }
+                                newCameraModule.onFinish = { module, result in
+                                    switch result {
+                                    case .finished:
+                                        self?.view?.onContinueButtonTap?()
+                                    case .cancelled:
+                                        self?.router.focusOnCurrentModule()
+                                    }
+                                }
                             }
-                            
-                            module.onFinish = self?.onFinish
-                    })
+                        )
+                    } else {
+                        self?.router.showMediaPicker(
+                            data: strongSelf.interactor.mediaPickerData.byDisablingLibrary(),
+                            overridenTheme: strongSelf.overridenTheme,
+                            isNewFlowPrototype: strongSelf.isNewFlowPrototype,
+                            configure: { [weak self] module in
+                                self?.configureMediaPicker(module)
+                            }
+                        )
+                    }
                 }
             )
             
             completion(viewData)
+        }
+    }
+    
+    private func configureMediaPicker(_ module: MediaPickerModule) {
+        
+        mediaPickerModule = module
+        
+        if let continueButtonPlacement = continueButtonPlacement {
+            module.setContinueButtonPlacement(continueButtonPlacement)
+        }
+        
+        if let continueButtonTitle = continueButtonTitle {
+            module.setContinueButtonTitle(continueButtonTitle)
+        }
+        
+        module.onItemsAdd = onItemsAdd
+        module.onItemUpdate = onItemUpdate
+        module.onItemAutocorrect = { [weak self] item, isAutocorrected, index in
+            if let index = index {
+                self?.interactor.replaceSelectedItem(at: index, with: item)
+            }
+            self?.onItemAutocorrect?(item, isAutocorrected, index)
+        }
+        module.onItemMove = { [weak self] sourceIndex, destinationIndex in
+            self?.interactor.moveSelectedItem(at: sourceIndex, to: destinationIndex)
+            self?.onItemMove?(sourceIndex, destinationIndex)
+        }
+        module.onItemRemove = { [weak self] mediaPickerItem, index in
+            if self?.view?.deselectItem(with: mediaPickerItem.image) == false {
+                // Кейс, когда удаляется "виртуальная" фотка (серверная, которой нет в галерее)
+                self?.handleItemDeselect(mediaPickerItem)
+            }
+            if let originalItem = mediaPickerItem.originalItem {
+                // Кейс, когда удаляется фотка, на которую наложен фильтр
+                // (вьюха не знает про связь измененной фотки с оригинальной)
+                self?.view?.deselectItem(with: originalItem.image)
+            }
+            self?.onItemRemove?(mediaPickerItem, index)
+        }
+        module.onCropFinish = onCropFinish
+        module.onCropCancel = onCropCancel
+        module.onContinueButtonTap = onContinueButtonTap
+        module.onFinish = onFinish
+        module.onCancel = { [weak module] in
+            module?.dismissModule()
         }
     }
     
@@ -384,16 +502,23 @@ final class PhotoLibraryV2Presenter: PhotoLibraryV2Module {
             movedIndexes: changes.movedIndexes
         )
     }
+    
+    func adjustSelectedPhotosBar() {
+        let images = interactor.selectedItems
+        
+        view?.setSelectedPhotosBarState(images.isEmpty
+            ? (shouldAllowFinishingWithNoPhotos ? .placeholder : .hidden)
+            : .visible(SelectedPhotosBarData(
+                lastPhoto: images.last?.image,
+                penultimatePhoto: images.count > 1 ? images[images.count - 2].image : nil,
+                countString: "\(images.count) фото"
+            ))
+        )
+    }
 }
 
 extension MediaPickerData {
-    func bySettingPhotoLibraryItems(_ items: [PhotoLibraryItem]) -> MediaPickerData {
-        let mediaPickerItems = items.map {
-            MediaPickerItem(
-                image: $0.image,
-                source: .photoLibrary
-            )
-        }
+    func bySettingMediaPickerItems(_ mediaPickerItems: [MediaPickerItem]) -> MediaPickerData {
         return MediaPickerData(
             items: mediaPickerItems,
             autocorrectionFilters: autocorrectionFilters,
@@ -406,6 +531,22 @@ extension MediaPickerData {
             initialActiveCameraType: initialActiveCameraType,
             cameraEnabled: false,
             photoLibraryEnabled: false
+        )
+    }
+    
+    func bySelectingLastItem() -> MediaPickerData {
+        return MediaPickerData(
+            items: items,
+            autocorrectionFilters: autocorrectionFilters,
+            selectedItem: items.last,
+            maxItemsCount: maxItemsCount,
+            cropEnabled: cropEnabled,
+            autocorrectEnabled: autocorrectEnabled,
+            hapticFeedbackEnabled: hapticFeedbackEnabled,
+            cropCanvasSize: cropCanvasSize,
+            initialActiveCameraType: initialActiveCameraType,
+            cameraEnabled: cameraEnabled,
+            photoLibraryEnabled: photoLibraryEnabled
         )
     }
     

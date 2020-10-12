@@ -1,5 +1,17 @@
+import UIKit
+
 public protocol MediaPickerRootModuleUITheme: AccessDeniedViewTheme {
     
+    var mediaPickerBackgroundColor: UIColor { get }
+    var cameraControlsViewBackgroundColor: UIColor { get }
+    var photoControlsViewBackgroundColor: UIColor { get }
+    var thumbnailsViewBackgroundColor: UIColor { get }
+    var photoPreviewBackgroundColor: UIColor { get }
+    var photoPreviewCollectionBackgroundColor: UIColor { get }
+
+    var mediaPickerTitleLightColor: UIColor { get }
+    var mediaPickerTitleDarkColor: UIColor { get }
+
     var shutterButtonColor: UIColor { get }
     var shutterButtonDisabledColor: UIColor { get }
     var focusIndicatorColor: UIColor { get }
@@ -14,6 +26,9 @@ public protocol MediaPickerRootModuleUITheme: AccessDeniedViewTheme {
     var cameraSubtitleColor: UIColor { get }
     var cameraSubtitleFont: UIFont { get }
     var cameraHintFont: UIFont { get }
+    var cameraBottomContinueButtonBackgroundColor: UIColor { get }
+    var cameraBottomContinueButtonTitleColor: UIColor { get }
+    var cameraBottomContinueButtonFont: UIFont { get }
     
     var removePhotoIcon: UIImage? { get }
     var autocorrectPhotoIconInactive: UIImage? { get }

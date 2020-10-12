@@ -30,68 +30,9 @@ final class ExamplePresenter {
     private let croppingOverlayProvidersFactory = Paparazzo.CroppingOverlayProvidersFactoryImpl()
     
     private func setUpView() {
-        
-        view?.setMediaPickerButtonTitle("Media Picker")
-        view?.setMaskCropperButtonTitle("Mask Cropper")
-        view?.setPhotoLibraryButtonTitle("Photo Library")
-        view?.setPhotoLibraryV2ButtonTitle("Photo Library version 2")
-        view?.setScannerButtonTitle("Scanner")
-        
-        view?.onShowMediaPickerButtonTap = { [weak self] in
-            self?.interactor.remoteItems { remoteItems in
-                self?.showMediaPicker(remoteItems: remoteItems)
-            }
-        }
-        
-        view?.onShowPhotoLibraryButtonTap = { [weak self] in
-            self?.interactor.photoLibraryItems { items in
-                self?.router.showPhotoLibrary(selectedItems: items, maxSelectedItemsCount: 5) { module in
-                    weak var weakModule = module
-                    module.onFinish = { result in
-                        weakModule?.dismissModule()
-                        
-                        switch result {
-                        case .selectedItems(let items):
-                            self?.interactor.setPhotoLibraryItems(items)
-                        case .cancelled:
-                            break
-                        }
-                    }
-                }
-            }
-        }
-        
-        view?.onShowPhotoLibraryV2ButtonTap = { [weak self] in
-            self?.interactor.photoLibraryItems { items in
-                let data = MediaPickerData(
-                    maxItemsCount: 20,
-                    cropEnabled: true,
-                    autocorrectEnabled: true,
-                    hapticFeedbackEnabled: true,
-                    cropCanvasSize: self?.cropCanvasSize ?? .zero
-                )
-                self?.router.showPhotoLibraryV2(
-                    mediaPickerData: data,
-                    selectedItems: items,
-                    maxSelectedItemsCount: 5)
-                { module in
-                    weak var weakModule = module
-                    module.onFinish = { result in
-                        weakModule?.dismissModule()
-                    }
-                    module.onCancel = {
-                        weakModule?.dismissModule()
-                    }
-                }
-            }
-        }
-        
-        view?.onShowMaskCropperButtonTap = { [weak self] in
-            self?.showMaskCropperCamera()
-        }
-        
-        view?.onShowScannerButtonTap = { [weak self] in
-            self?.showScanner()
+        view?.onViewDidLoad = { [weak self] in
+            guard let strongSelf = self else { return }
+            strongSelf.view?.setItems(strongSelf.exampleViewItems())
         }
     }
     
@@ -150,8 +91,39 @@ final class ExamplePresenter {
                     recognitionHandler.onRecognize = { label in
                         module?.showInfoMessage(label, timeout: 3)
                     }
-            }
+                }
             )   
+        }
+    }
+    
+    private func showPhotoLibraryV2(newFlow: Bool) {
+        interactor.photoLibraryItems { [weak self] items in
+            let data = MediaPickerData(
+                maxItemsCount: 5,
+                cropEnabled: true,
+                autocorrectEnabled: true,
+                hapticFeedbackEnabled: true,
+                cropCanvasSize: self?.cropCanvasSize ?? .zero
+            )
+            self?.router.showPhotoLibraryV2(
+                mediaPickerData: data,
+                selectedItems: items,
+                isNewFlowPrototype: newFlow,
+                configure: { module in
+                    weak var weakModule = module
+                    module.setContinueButtonPlacement(.bottom)
+                    module.onFinish = { result in
+                        print("onFinish")
+                        weakModule?.setContinueButtonStyle(.spinner)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                            weakModule?.dismissModule()
+                        }
+                    }
+                    module.onCancel = {
+                        weakModule?.dismissModule()
+                    }
+                }
+            )
         }
     }
     
@@ -184,7 +156,7 @@ final class ExamplePresenter {
             items: items,
             autocorrectionFilters: [AutoAdjustmentFilter()],
             selectedItem: items.last,
-            maxItemsCount: 20,
+            maxItemsCount: 5,
             cropEnabled: true,
             autocorrectEnabled: true,
             hapticFeedbackEnabled: true,
@@ -214,6 +186,7 @@ final class ExamplePresenter {
         }
         
         module.setContinueButtonTitle("Done")
+        module.setContinueButtonPlacement(.bottom)
         
         module.onCancel = { [weak module] in
             module?.dismissModule()
@@ -240,15 +213,98 @@ final class ExamplePresenter {
             
             let options = ImageRequestOptions(
                 size: .fitSize(CGSize(width: 1000, height: 1000)),
-                deliveryMode: .best
+                deliveryMode: .best,
+                needsMetadata: true
             )
             
             items.first?.image.requestImage(options: options) { (result: ImageRequestResult<UIImage>) in
-                let data = result.image.flatMap { UIImagePNGRepresentation($0) }
+                let data = result.image.flatMap { $0.pngData() }
                 let url = URL(fileURLWithPath: NSTemporaryDirectory() + "/crop_test2.jpg")
                 try! data?.write(to: url, options: [.atomic])
             }
         }
     }
     
+    // MARK: - ExampleView Items
+    
+    private func exampleViewItems() -> [ExampleViewItem] {
+        return [
+            photoLibraryV2NewFlowItem(),
+            photoLibraryV2Item(),
+            photoLibraryItem(),
+            mediaPickerItem(),
+            maskCropperItem(),
+            scannerItem()
+        ]
+    }
+    
+    private func mediaPickerItem() -> ExampleViewItem {
+        return ExampleViewItem(
+            title: "Media Picker",
+            onTap: { [weak self] in
+                self?.interactor.remoteItems { remoteItems in
+                    self?.showMediaPicker(remoteItems: remoteItems)
+                }
+            }
+        )
+    }
+    
+    private func maskCropperItem() -> ExampleViewItem {
+        return ExampleViewItem(
+            title: "Mask Cropper",
+            onTap: { [weak self] in
+                self?.showMaskCropperCamera()
+            }
+        )
+    }
+    
+    private func photoLibraryItem() -> ExampleViewItem {
+        return ExampleViewItem(
+            title: "Photo Library v1",
+            onTap: { [weak self] in
+                self?.interactor.photoLibraryItems { items in
+                    self?.router.showPhotoLibrary(selectedItems: items, maxSelectedItemsCount: 5) { module in
+                        weak var weakModule = module
+                        module.onFinish = { result in
+                            weakModule?.dismissModule()
+                            
+                            switch result {
+                            case .selectedItems(let items):
+                                self?.interactor.setPhotoLibraryItems(items)
+                            case .cancelled:
+                                break
+                            }
+                        }
+                    }
+                }
+            }
+        )
+    }
+    
+    private func photoLibraryV2Item() -> ExampleViewItem {
+        return ExampleViewItem(
+            title: "Photo Library v2 — Old flow",
+            onTap: { [weak self] in
+                self?.showPhotoLibraryV2(newFlow: false)
+            }
+        )
+    }
+    
+    private func photoLibraryV2NewFlowItem() -> ExampleViewItem {
+        return ExampleViewItem(
+            title: "Photo Library v2 — New flow",
+            onTap: { [weak self] in
+                self?.showPhotoLibraryV2(newFlow: true)
+            }
+        )
+    }
+    
+    private func scannerItem() -> ExampleViewItem {
+        return ExampleViewItem(
+            title: "Scanner",
+            onTap: { [weak self] in
+                self?.showScanner()
+            }
+        )
+    }
 }

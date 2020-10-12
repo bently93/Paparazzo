@@ -137,7 +137,11 @@ extension UIView {
     }
     
     func setAccessibilityId(_ id: AccessibilityId) {
-        accessibilityIdentifier = id.rawValue
+        setAccessibilityId(id.rawValue)
+    }
+    
+    func setAccessibilityId(_ identifier: String) {
+        accessibilityIdentifier = identifier
         isAccessibilityElement = true
     }
 }
@@ -224,5 +228,16 @@ extension UIColor {
     
     static func RGBS(rgb: CGFloat, alpha: CGFloat = 1) -> UIColor {
         return UIColor(red: rgb/255, green: rgb/255, blue: rgb/255, alpha: alpha)
+    }
+}
+
+extension UIEdgeInsets {
+    
+    var width: CGFloat {
+        return left + right
+    }
+    
+    var height: CGFloat {
+        return top + bottom
     }
 }

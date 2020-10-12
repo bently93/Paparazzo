@@ -10,7 +10,7 @@ import ImageSource
 final class CaptureSessionPreviewService: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     
     // MARK: - CaptureSessionPreviewService
-    
+    @discardableResult
     static func startStreamingPreview(
         of captureSession: AVCaptureSession,
         to handler: CameraCaptureOutputHandler,
@@ -79,14 +79,14 @@ final class CaptureSessionPreviewService: NSObject, AVCaptureVideoDataOutputSamp
         notificationCenter.addObserver(
             self,
             selector: #selector(handleAppWillResignActive(_:)),
-            name: .UIApplicationWillResignActive,
+            name: UIApplication.willResignActiveNotification,
             object: nil
         )
         
         notificationCenter.addObserver(
             self,
             selector: #selector(handleAppDidBecomeActive(_:)),
-            name: .UIApplicationDidBecomeActive,
+            name: UIApplication.didBecomeActiveNotification,
             object: nil
         )
     }

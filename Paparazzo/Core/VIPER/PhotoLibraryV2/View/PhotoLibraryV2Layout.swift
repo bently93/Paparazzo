@@ -12,7 +12,11 @@ final class PhotoLibraryV2Layout: UICollectionViewFlowLayout {
     private let insets = UIEdgeInsets(top: 6, left: 6, bottom: 6, right: 6)
     private let cellSpacing = CGFloat(6)
     private let numberOfPhotosInRow = UIDevice.current.userInterfaceIdiom == .pad ? 5 : 3
-    private let headerViewHeight = CGFloat(166)
+    
+    // MARK: - PhotoLibraryV2Layout
+    func frameForHeader(at indexPath: IndexPath) -> CGRect? {
+        return headerAttributes[indexPath]?.frame
+    }
     
     // MARK: - UICollectionViewLayout
     
@@ -99,16 +103,19 @@ final class PhotoLibraryV2Layout: UICollectionViewFlowLayout {
     private func setUpHeaderAttributes(section: Int) -> CGFloat {
         let headerIndexPath = IndexPath(item: 0, section: section)
         let headerAttributes = UICollectionViewLayoutAttributes(
-            forSupplementaryViewOfKind: UICollectionElementKindSectionHeader,
+            forSupplementaryViewOfKind: UICollectionView.elementKindSectionHeader,
             with: headerIndexPath
         )
         let origin = CGPoint(
             x: insets.left,
             y: insets.top
         )
+        
+        let width = (collectionView?.width ?? 0) - insets.left - insets.right
+        
         let size = CGSize(
-            width: (collectionView?.width ?? 0) - insets.left - insets.right,
-            height: hasHeader ? headerViewHeight : 0
+            width: width,
+            height: hasHeader ? width * 0.36 : 0
         )
         
         headerAttributes.frame = CGRect(

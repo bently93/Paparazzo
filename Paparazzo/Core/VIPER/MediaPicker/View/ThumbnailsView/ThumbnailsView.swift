@@ -41,8 +41,7 @@ final class ThumbnailsView: UIView, UICollectionViewDataSource, MediaRibbonLayou
     init() {
         
         layout = ThumbnailsViewLayout()
-        layout.scrollDirection = .horizontal
-        layout.minimumLineSpacing = mediaRibbonInteritemSpacing
+        layout.spacing = mediaRibbonInteritemSpacing
         
         collectionView = UICollectionView(frame: .zero, collectionViewLayout: layout)
         collectionView.clipsToBounds = false
@@ -241,11 +240,6 @@ final class ThumbnailsView: UIView, UICollectionViewDataSource, MediaRibbonLayou
     
     // MARK: - MediaRibbonLayoutDelegate
     
-    func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout, sizeForItemAt indexPath: IndexPath) -> CGSize {
-        let height = bounds.size.height - contentInsets.top - contentInsets.bottom
-        return CGSize(width: height, height: height)
-    }
-    
     func shouldApplyTransformToItemAtIndexPath(_ indexPath: IndexPath) -> Bool {
         switch dataSource[indexPath] {
         case .photo:
@@ -302,6 +296,7 @@ final class ThumbnailsView: UIView, UICollectionViewDataSource, MediaRibbonLayou
         if let cell = cell as? MediaItemThumbnailCell {
             cell.selectedBorderColor = theme?.mediaRibbonSelectionColor
             cell.customizeWithItem(mediaPickerItem)
+            cell.setAccessibilityId("\(AccessibilityId.mediaItemThumbnailCell)-\(indexPath.row)")
         }
         
         return cell
@@ -328,7 +323,7 @@ final class ThumbnailsView: UIView, UICollectionViewDataSource, MediaRibbonLayou
             cell.setCameraIcon(theme?.returnToCameraIcon)
             cell.setCameraIconTransform(cameraIconTransform)
             
-            if let cameraOutputParameters = cameraOutputParameters {
+            if let cameraOutputParameters = cameraOutputParameters, !isHidden {
                 cell.setOutputParameters(cameraOutputParameters)
             }
         }

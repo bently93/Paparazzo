@@ -35,7 +35,7 @@ class BaseUIKitRouter {
         guard let viewController = viewController else { return }
         
         if let navigationController = viewController.navigationController {
-            if let index = navigationController.viewControllers.index(of: viewController), index > 0 {
+            if let index = navigationController.viewControllers.firstIndex(of: viewController), index > 0 {
                 let previousController = navigationController.viewControllers[index - 1]
                 navigationController.popToViewController(previousController, animated: animated)
             } else {
@@ -55,6 +55,10 @@ class BaseUIKitRouter {
     }
     
     func present(_ viewController: UIViewController, animated: Bool, completion: (() -> ())? = nil) {
-        self.viewController?.present(viewController, animated: animated, completion: completion)
+        if let topViewController = (self.viewController as? UINavigationController)?.topViewController {
+            topViewController.present(viewController, animated: animated, completion: completion)
+        } else {
+            self.viewController?.present(viewController, animated: animated, completion: completion)
+        }
     }
 }

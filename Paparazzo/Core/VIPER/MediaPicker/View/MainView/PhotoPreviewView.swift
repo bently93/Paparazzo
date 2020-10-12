@@ -7,12 +7,20 @@ final class PhotoPreviewView: UIView, UICollectionViewDataSource, UICollectionVi
     var onSwipeToCameraProgressChange: ((CGFloat) -> ())?
     var hapticFeedbackEnabled = false
     
+    var collectionViewBackgroundColor = UIColor.white {
+        didSet {
+            guard collectionViewBackgroundColor != oldValue else { return }
+            collectionView.backgroundColor = collectionViewBackgroundColor
+        }
+    }
+    
     private let collectionView: UICollectionView
     private let dataSource = MediaRibbonDataSource()
     
     // MARK: - Constants
     
     private var cameraView: UIView?
+    private var cameraOverlayView: UIView?
     
     private let photoCellReuseId = "PhotoCell"
     private let cameraCellReuseId = "CameraCell"
@@ -28,7 +36,7 @@ final class PhotoPreviewView: UIView, UICollectionViewDataSource, UICollectionVi
         layout.minimumInteritemSpacing = 0
         
         collectionView = UICollectionView(frame: .zero, collectionViewLayout: layout)
-        collectionView.backgroundColor = .white
+        collectionView.backgroundColor = collectionViewBackgroundColor
         collectionView.showsHorizontalScrollIndicator = false
         collectionView.showsVerticalScrollIndicator = false
         collectionView.isPagingEnabled = true
@@ -133,6 +141,10 @@ final class PhotoPreviewView: UIView, UICollectionViewDataSource, UICollectionVi
         }
     }
     
+    func setViewfinderOverlay(_ overlay: UIView?) {
+        self.cameraOverlayView = overlay
+    }
+    
     // MARK: - UICollectionViewDataSource
     
     func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
@@ -148,6 +160,7 @@ final class PhotoPreviewView: UIView, UICollectionViewDataSource, UICollectionVi
             
             if let cell = cell as? MainCameraCell {
                 cell.cameraView = cameraView
+                cell.cameraOverlayView = cameraOverlayView
             }
             
             return cell

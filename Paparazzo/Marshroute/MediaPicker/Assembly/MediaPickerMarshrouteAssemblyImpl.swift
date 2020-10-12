@@ -3,7 +3,9 @@ import UIKit
 
 public final class MediaPickerMarshrouteAssemblyImpl: BasePaparazzoAssembly, MediaPickerMarshrouteAssembly {
     
-    typealias AssemblyFactory = CameraAssemblyFactory & ImageCroppingAssemblyFactory & PhotoLibraryMarshrouteAssemblyFactory & MaskCropperMarshrouteAssemblyFactory
+    typealias AssemblyFactory = CameraAssemblyFactory & ImageCroppingAssemblyFactory
+        & PhotoLibraryMarshrouteAssemblyFactory & MaskCropperMarshrouteAssemblyFactory
+        & NewCameraMarshrouteAssemblyFactory
     
     private let assemblyFactory: AssemblyFactory
     
@@ -17,8 +19,9 @@ public final class MediaPickerMarshrouteAssemblyImpl: BasePaparazzoAssembly, Med
     public func module(
         data: MediaPickerData,
         overridenTheme: PaparazzoUITheme?,
+        viewfinderOverlay: UIView?,
         routerSeed: RouterSeed,
-        isMetalEnabled: Bool,
+        isNewFlowPrototype: Bool,
         configure: (MediaPickerModule) -> ())
         -> UIViewController
     {
@@ -42,11 +45,11 @@ public final class MediaPickerMarshrouteAssemblyImpl: BasePaparazzoAssembly, Med
         let cameraAssembly = assemblyFactory.cameraAssembly()
         let (cameraView, cameraModuleInput) = cameraAssembly.module(
             initialActiveCameraType: data.initialActiveCameraType,
-            overridenTheme: overridenTheme,
-            isMetalEnabled: isMetalEnabled
+            overridenTheme: overridenTheme
         )
         
         let presenter = MediaPickerPresenter(
+            isNewFlowPrototype: isNewFlowPrototype,
             interactor: interactor,
             router: router,
             cameraModuleInput: cameraModuleInput
@@ -59,6 +62,7 @@ public final class MediaPickerMarshrouteAssemblyImpl: BasePaparazzoAssembly, Med
         viewController.setShowsCropButton(data.cropEnabled)
         viewController.setShowsAutocorrectButton(data.autocorrectEnabled)
         viewController.setHapticFeedbackEnabled(data.hapticFeedbackEnabled)
+        viewController.setViewfinderOverlay(viewfinderOverlay)
         
         presenter.view = viewController
         
